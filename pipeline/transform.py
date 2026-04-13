@@ -40,7 +40,10 @@ def transform(orders, order_items, products, categories):
 
 def run_transform(engine):
     """
-    Read staging tables from PostgreSQL, run transform(), write to analytics schema.
+    Orchestrate Phase 3: read staging tables, delegate to transform(), write analytics.
+
+    Delegates aggregation logic to transform() to keep that function pure and
+    independently testable without a database connection.
 
     Args:
         engine: SQLAlchemy engine connected to PostgreSQL
