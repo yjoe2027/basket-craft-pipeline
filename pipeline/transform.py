@@ -2,34 +2,36 @@ import pandas as pd
 from sqlalchemy import text
 
 
-def transform(orders, order_items, products, categories):
+def transform(orders, order_items, products):
     """
-    Join and aggregate staging DataFrames into monthly sales by category.
+    Join and aggregate staging DataFrames into monthly sales by product.
+
+    Real schema notes:
+        - No categories table; product_name serves as the category dimension.
+        - Order date is created_at (timestamp) on the orders table.
+        - Each order_items row is one item; revenue = price_usd (no quantity column).
 
     Args:
-        orders:      DataFrame with columns order_id, order_date
-        order_items: DataFrame with columns order_id, product_id, quantity, unit_price
-        products:    DataFrame with columns product_id, category_id
-        categories:  DataFrame with columns category_id, name
+        orders:      DataFrame with columns order_id, created_at
+        order_items: DataFrame with columns order_id, product_id, price_usd
+        products:    DataFrame with columns product_id, product_name
 
     Returns:
         DataFrame with columns:
             order_month, category_name, total_revenue, order_count, avg_order_value
     """
-    df = order_items.merge(orders[["order_id", "order_date"]], on="order_id")
-    df = df.merge(products[["product_id", "category_id"]], on="product_id")
+    df = order_items.merge(orders[["order_id", "created_at"]], on="order_id")
     df = df.merge(
-        categories[["category_id", "name"]].rename(columns={"name": "category_name"}),
-        on="category_id",
+        products[["product_id", "product_name"]].rename(columns={"product_name": "category_name"}),
+        on="product_id",
     )
 
-    df["line_revenue"] = df["quantity"] * df["unit_price"]
-    df["order_month"] = df["order_date"].dt.to_period("M").dt.to_timestamp()
+    df["order_month"] = df["created_at"].dt.to_period("M").dt.to_timestamp()
 
     result = (
         df.groupby(["order_month", "category_name"])
         .agg(
-            total_revenue=("line_revenue", "sum"),
+            total_revenue=("price_usd", "sum"),
             order_count=("order_id", "nunique"),
         )
         .reset_index()
@@ -55,9 +57,8 @@ def run_transform(engine):
     orders = pd.read_sql_table("orders", engine, schema="staging")
     order_items = pd.read_sql_table("order_items", engine, schema="staging")
     products = pd.read_sql_table("products", engine, schema="staging")
-    categories = pd.read_sql_table("categories", engine, schema="staging")
 
-    result = transform(orders, order_items, products, categories)
+    result = transform(orders, order_items, products)
     result.to_sql(
         "monthly_sales_by_category",
         engine,
