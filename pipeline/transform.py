@@ -20,13 +20,16 @@ def transform(orders, order_items, products):
         DataFrame with columns:
             order_month, category_name, total_revenue, order_count, avg_order_value
     """
-    df = order_items.merge(orders[["order_id", "created_at"]], on="order_id")
+    # Rename created_at on orders before merging to avoid collision with
+    # order_items.created_at (both tables have this column).
+    orders_slim = orders[["order_id", "created_at"]].rename(columns={"created_at": "order_date"})
+    df = order_items.merge(orders_slim, on="order_id")
     df = df.merge(
         products[["product_id", "product_name"]].rename(columns={"product_name": "category_name"}),
         on="product_id",
     )
 
-    df["order_month"] = df["created_at"].dt.to_period("M").dt.to_timestamp()
+    df["order_month"] = df["order_date"].dt.to_period("M").dt.to_timestamp()
 
     result = (
         df.groupby(["order_month", "category_name"])
