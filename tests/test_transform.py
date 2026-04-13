@@ -36,6 +36,8 @@ def test_revenue_order_count_and_aov_by_month_and_category():
 
     result = transform(orders, order_items, products, categories)
 
+    assert set(result.columns) == {"order_month", "category_name", "total_revenue", "order_count", "avg_order_value"}
+
     jan_wicker = result.loc[
         (result["order_month"] == pd.Timestamp("2025-01-01")) &
         (result["category_name"] == "Wicker Baskets")
