@@ -1,33 +1,45 @@
 # Basket Craft Pipeline
 
-This project is a Python ELT pipeline that extracts order data from a MySQL source database, stages it in PostgreSQL, and builds a monthly analytics table for reporting.
+This project is a Python ELT pipeline that extracts data from a Basket Craft MySQL source database and loads it into two PostgreSQL destinations:
 
-The final output table is:
+1. **AWS RDS PostgreSQL** — all 8 raw source tables loaded as-is into the `staging` schema (`run_extract_rds.py`)
+2. **Local Docker PostgreSQL** — 3 core tables staged and transformed into a monthly analytics aggregate (`run_pipeline.py`)
 
-- `analytics.monthly_sales_by_category`
+### AWS RDS — Raw staging tables (`staging` schema)
 
-It contains:
+| Table | Rows |
+|---|---|
+| employees | 20 |
+| order_item_refunds | 1,731 |
+| order_items | 40,025 |
+| orders | 32,313 |
+| products | 4 |
+| users | 31,696 |
+| website_pageviews | 1,188,124 |
+| website_sessions | 472,871 |
 
-- `order_month`
-- `category_name`
-- `total_revenue`
-- `order_count`
-- `avg_order_value`
+### Local PostgreSQL — Analytics output
+
+- `analytics.monthly_sales_by_category` — monthly revenue, order count, and average order value by product
 
 ## Project Structure
 
-- `pipeline/db.py` - creates SQLAlchemy engines for MySQL and PostgreSQL
-- `pipeline/extract.py` - reads source tables from MySQL
-- `pipeline/load_staging.py` - writes raw tables to PostgreSQL `staging` schema
-- `pipeline/transform.py` - transforms staged data into analytics output
-- `run_pipeline.py` - command-line entry point for dry-run and full pipeline runs
-- `tests/test_transform.py` - unit tests for transform logic
+- `pipeline/db.py` — SQLAlchemy engine factories for MySQL, local PostgreSQL, and AWS RDS
+- `pipeline/extract.py` — reads 3 core tables from MySQL (used by `run_pipeline.py`)
+- `pipeline/extract_all.py` — discovers and reads all MySQL tables dynamically (used by `run_extract_rds.py`)
+- `pipeline/load_staging.py` — writes raw tables to local PostgreSQL `staging` schema
+- `pipeline/load_rds.py` — writes all raw tables to RDS `staging` schema with per-table error isolation
+- `pipeline/transform.py` — transforms staged data into analytics output
+- `run_pipeline.py` — local pipeline: extract 3 tables → stage → transform → analytics
+- `run_extract_rds.py` — RDS extract: dump all MySQL tables to RDS staging (raw, no transforms)
+- `tests/test_transform.py` — unit tests for transform logic
 
 ## Prerequisites
 
 - Python 3.10+ (project currently runs with Python 3.14)
-- Docker Desktop (or Docker Engine + Compose)
+- Docker Desktop (or Docker Engine + Compose) — only needed for the local pipeline
 - Access credentials for the source MySQL database
+- AWS RDS PostgreSQL instance credentials — only needed for `run_extract_rds.py`
 
 ## Setup
 
@@ -59,7 +71,7 @@ Copy the template and fill in credentials:
 cp .env.example .env
 ```
 
-Expected variables in `.env`:
+Expected variables in `.env` (see `.env.example` for the full template):
 
 ```env
 # MySQL source
@@ -69,12 +81,19 @@ MYSQL_DB=basket_craft
 MYSQL_USER=
 MYSQL_PASSWORD=
 
-# PostgreSQL destination
+# Local PostgreSQL destination (docker-compose)
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_DB=basket_craft_dw
 POSTGRES_USER=pipeline
 POSTGRES_PASSWORD=pipeline
+
+# AWS RDS PostgreSQL destination
+RDS_HOST=
+RDS_PORT=5432
+RDS_USER=
+RDS_PASSWORD=
+RDS_DATABASE=
 ```
 
 ### 5) Start PostgreSQL (destination warehouse)
@@ -88,21 +107,35 @@ PostgreSQL runs via `docker-compose.yml` on `localhost:5432`.
 
 ## Running the Pipeline
 
-### Dry Run (connectivity and source row counts only)
+### RDS Raw Extract (all 8 tables → AWS RDS staging)
 
-Use this to validate DB connections without writing to PostgreSQL:
-
-```bash
-python3 run_pipeline.py --dry-run
-```
-
-### Full Run (extract -> stage -> transform)
+Test connections first without writing:
 
 ```bash
-python3 run_pipeline.py
+python run_extract_rds.py --dry-run
 ```
 
-Expected high-level output:
+Full load (idempotent — replaces staging tables on each run):
+
+```bash
+python run_extract_rds.py
+```
+
+### Local Analytics Pipeline (3 tables → Docker PostgreSQL → analytics)
+
+Dry run to validate connections only:
+
+```bash
+python run_pipeline.py --dry-run
+```
+
+Full run (extract → stage → transform):
+
+```bash
+python run_pipeline.py
+```
+
+Expected output phases:
 
 - Phase 1: Extracting from MySQL
 - Phase 2: Loading to PostgreSQL staging
