@@ -29,3 +29,16 @@ def get_postgres_engine():
         )
     )
     return create_engine(url)
+
+
+def get_rds_engine():
+    url = (
+        "postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}".format(
+            user=os.environ["RDS_USER"],
+            password=os.environ["RDS_PASSWORD"],
+            host=os.environ["RDS_HOST"],
+            port=os.environ.get("RDS_PORT", "5432"),
+            db=os.environ["RDS_DATABASE"],
+        )
+    )
+    return create_engine(url)
